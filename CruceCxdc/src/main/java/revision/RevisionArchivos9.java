@@ -13,6 +13,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import conexion.ConexionBD;
 
+import modelo.AdministradoraInfo;
+
 public class RevisionArchivos9 {
 	public static void main(String[] args) {
 		long startTime = System.currentTimeMillis(); // Capturar el tiempo de inicio
@@ -21,99 +23,128 @@ public class RevisionArchivos9 {
 		List<String> documentos = new ArrayList<>();
 		List<String> cabeceras = new ArrayList<>();
 		Map<String, Integer> documentoRowMap = new HashMap<>();
-		Workbook inputWorkbook = leerDocumentosDeExcel(
-				"D:\\OneDrive - Superfinanciera\\Pensiones\\Caxdac\\Skandia\\skandiaASfc2.xlsx", documentos, cabeceras,
-				documentoRowMap);
+		String basePath = "D:\\OneDrive - Superfinanciera\\Pensiones\\Caxdac\\";
+		String[] administradoras = { "Skandia", "Proteccion", "Porvenir", "Colfondos" };
 
-		// Crear un libro de trabajo de Excel para los resultados
-		Workbook outputWorkbook = new XSSFWorkbook();
-		Sheet outputSheet = outputWorkbook.createSheet("Resultados");
+		Map<String, AdministradoraInfo> administradorasInfo = new HashMap<>();
+		administradorasInfo.put("Skandia", new AdministradoraInfo(23, 9));
+		administradorasInfo.put("Colfondos", new AdministradoraInfo(23, 10));
+		administradorasInfo.put("Proteccion", new AdministradoraInfo(23, 2));
+		administradorasInfo.put("Porvenir", new AdministradoraInfo(23, 3));
 
-		// Llamar al método copiarFilas para copiar las filas del archivo de entrada al
-		// archivo de salida
-		copiarFilas(inputWorkbook, outputWorkbook);
+		for (String administradora : administradoras) {
+			System.out.println("Administradora: " + administradora);
 
-		
-		
-		// Establecer la conexión
-		try (Connection connection = ConexionBD.obtenerConexion()) {
-			if (connection != null) {
-				System.out.println("Conectado a Teradata exitosamente");
+			AdministradoraInfo info = administradorasInfo.get(administradora);
 
-				List<String> cabecerasConsulta = Arrays.asList("IDENTIFICACION", "NOMBRES", "APELLIDOS", "CODIGO_ENTIDAD", "DESC_CALIDAD_AFILPEN");
-				agregarCabecerasConsulta(outputSheet, cabecerasConsulta);
-				
-				// Preparar la consulta SQL
-				String query = "SELECT IDENTIFICACION, NOMBRES, APELLIDOS, CODIGO_ENTIDAD, DESC_CALIDAD_AFILPEN "
-						+ "FROM afiliados_pensionados "
-						+ "WHERE fecha_corte = '2024-08-31' AND TIPO_ENTIDAD = 23 AND CODIGO_ENTIDAD = 9 AND identificacion = ?";
-				for (String documento : documentos) {
-					try (PreparedStatement pstmt = connection.prepareStatement(query)) {
-						pstmt.setString(1, documento);
-						ResultSet rs = pstmt.executeQuery();
+			Workbook inputWorkbook = leerDocumentosDeExcel(basePath, administradora, documentos, cabeceras,
+					documentoRowMap);
 
-						boolean documentoEncontrado = false; // Variable para rastrear si se encontraron filas para el
-																// documento
+			// Crear un libro de trabajo de Excel para los resultados
+			Workbook outputWorkbook = new XSSFWorkbook();
+			Sheet outputSheet = outputWorkbook.createSheet("Resultados");
 
-						// Procesar los resultados
-						while (rs.next()) {
-							documentoEncontrado = true; // Marcar como encontrado
-							if (documentoRowMap.containsKey(documento)) {
+			// Llamar al método copiarFilas para copiar las filas del archivo de entrada al
+			// archivo de salida
+			copiarFilas(inputWorkbook, outputWorkbook);
+
+			// Establecer la conexión
+			try (Connection connection = ConexionBD.obtenerConexion()) {
+				if (connection != null) {
+					System.out.println("Conectado a Teradata exitosamente");
+
+					List<String> cabecerasConsulta = Arrays.asList("IDENTIFICACION", "NOMBRES", "APELLIDOS",
+							"CODIGO_ENTIDAD", "DESC_CALIDAD_AFILPEN");
+					agregarCabecerasConsulta(outputSheet, cabecerasConsulta);
+
+					// Preparar la consulta SQL
+					String query = "SELECT IDENTIFICACION, NOMBRES, APELLIDOS, CODIGO_ENTIDAD, DESC_CALIDAD_AFILPEN "
+							+ "FROM afiliados_pensionados "
+							+ "WHERE fecha_corte = '2024-08-31' AND TIPO_ENTIDAD = ? AND CODIGO_ENTIDAD = ? AND identificacion = ?";
+					
+					for (String documento : documentos) {
+						try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+							pstmt.setInt(1, info.tipoEntidad); // Usar tipoEntidad de la administradora actual
+							pstmt.setInt(2, info.codigoEntidad); // Usar codigoEntidad de la administradora actual
+							pstmt.setString(3, documento);
+							ResultSet rs = pstmt.executeQuery();
+
+							// Variable para rastrear si se encontraron filas para el documento
+							boolean documentoEncontrado = false;
+
+							// Procesar los resultados
+							while (rs.next()) {
+								documentoEncontrado = true; // Marcar como encontrado
+								if (documentoRowMap.containsKey(documento)) {
+									int rowNum = documentoRowMap.get(documento);
+									Row row = outputSheet.getRow(rowNum);
+									if (row == null) {
+										row = outputSheet.createRow(rowNum); // Crear la fila si no existe
+									}
+									int lastCellNum = row.getLastCellNum() == -1 ? 0 : row.getLastCellNum();
+									row.createCell(lastCellNum++).setCellValue(rs.getString("IDENTIFICACION"));
+									row.createCell(lastCellNum++).setCellValue(rs.getString("NOMBRES"));
+									row.createCell(lastCellNum++).setCellValue(rs.getString("APELLIDOS"));
+									row.createCell(lastCellNum++).setCellValue(rs.getString("CODIGO_ENTIDAD"));
+									row.createCell(lastCellNum).setCellValue(rs.getString("DESC_CALIDAD_AFILPEN"));
+								}
+							}
+							// Si después de procesar la consulta, documentoEncontrado es falso, entonces el
+							// documento no fue encontrado
+							if (!documentoEncontrado) {
 								int rowNum = documentoRowMap.get(documento);
 								Row row = outputSheet.getRow(rowNum);
 								if (row == null) {
-									row = outputSheet.createRow(rowNum); // Crear la fila si no existe
+									row = outputSheet.createRow(rowNum);
 								}
-								int lastCellNum = row.getLastCellNum() == -1 ? 0 : row.getLastCellNum(); 
-								row.createCell(lastCellNum++).setCellValue(rs.getString("IDENTIFICACION"));
-								row.createCell(lastCellNum++).setCellValue(rs.getString("NOMBRES"));
-								row.createCell(lastCellNum++).setCellValue(rs.getString("APELLIDOS"));
-								row.createCell(lastCellNum++).setCellValue(rs.getString("CODIGO_ENTIDAD"));
-								row.createCell(lastCellNum).setCellValue(rs.getString("DESC_CALIDAD_AFILPEN"));
+								int lastCellNum = row.getLastCellNum() == -1 ? 0 : row.getLastCellNum();
+								row.createCell(lastCellNum).setCellValue("Documento no encontrado");
 							}
-						}
-						// Si después de procesar la consulta, documentoEncontrado es falso, entonces el
-						// documento no fue encontrado
-						if (!documentoEncontrado) {
-							int rowNum = documentoRowMap.get(documento);
-							Row row = outputSheet.getRow(rowNum);
-							if (row == null) {
-								row = outputSheet.createRow(rowNum);
-							}
-							int lastCellNum = row.getLastCellNum() == -1 ? 0 : row.getLastCellNum();
-							row.createCell(lastCellNum).setCellValue("Documento no encontrado");
 						}
 					}
 				}
-			}
-		} catch (SQLException e) {
-			System.out.println("Error al conectarse a Teradata");
-			e.printStackTrace();
-		} finally {
-			// Guardar el archivo Excel
-			try (FileOutputStream out = new FileOutputStream(
-					new File("D:\\OneDrive - Superfinanciera\\Pensiones\\Caxdac\\Skandia\\Resultados.xlsx"))) {
-				outputWorkbook.write(out);
-				outputWorkbook.close();
-			} catch (Exception e) {
+			} catch (SQLException e) {
+				System.out.println("Error al conectarse a Teradata");
 				e.printStackTrace();
-			}
-			long endTime = System.currentTimeMillis(); // Capturar el tiempo de finalización
-			long duration = endTime - startTime; // Calcular la duración
-			System.out.println("Ejecución finalizada.");
-			// Convertir la duración de milisegundos a horas, minutos y segundos
-			long segundos = (duration / 1000) % 60;
-			long minutos = (duration / (1000 * 60)) % 60;
-			long horas = (duration / (1000 * 60 * 60)) % 24;
+			} finally {
+				// Guardar el archivo Excel
+				String outputFilePath = basePath + administradora + "\\Resultados_" + administradora + ".xlsx";
+				try (FileOutputStream out = new FileOutputStream(new File(outputFilePath))) {
+					outputWorkbook.write(out);
+					System.out.println(
+							"Archivo de resultados guardado para " + administradora + " en: " + outputFilePath);
 
-			String tiempoFormateado = String.format("%02d horas, %02d minutos, %02d segundos", horas, minutos,
-					segundos);
-			System.out.println("Duración del proceso: " + tiempoFormateado);
+				} catch (Exception e) {
+					e.printStackTrace();
+				} finally {
+					// Cerrar el archivo de salida
+					try {
+						outputWorkbook.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+				long endTime = System.currentTimeMillis(); // Capturar el tiempo de finalización
+				long duration = endTime - startTime; // Calcular la duración
+				System.out.println("Ejecución finalizada.");
+				// Convertir la duración de milisegundos a horas, minutos y segundos
+				long segundos = (duration / 1000) % 60;
+				long minutos = (duration / (1000 * 60)) % 60;
+				long horas = (duration / (1000 * 60 * 60)) % 24;
+
+				String tiempoFormateado = String.format("%02d horas, %02d minutos, %02d segundos", horas, minutos,
+						segundos);
+				System.out.println("Duración del proceso: " + tiempoFormateado);
+			}
 		}
 	}
 
-	public static Workbook leerDocumentosDeExcel(String filePath, List<String> documentos, List<String> cabeceras,
-			Map<String, Integer> documentoRowMap) {
+	public static Workbook leerDocumentosDeExcel(String basePath, String administradora, List<String> documentos,
+			List<String> cabeceras, Map<String, Integer> documentoRowMap) {
+//	public static Workbook leerDocumentosDeExcel(String filePath, List<String> documentos, List<String> cabeceras,
+//			Map<String, Integer> documentoRowMap) {
+		String filePath = basePath + administradora + "\\" + administradora.toLowerCase() + "ASfc2.xlsx";
+		System.out.println("filePath: " + filePath);
 		Workbook workbook = null;
 		try (FileInputStream file = new FileInputStream(new File(filePath))) {
 			workbook = new XSSFWorkbook(file);
@@ -215,15 +246,18 @@ public class RevisionArchivos9 {
 			}
 		}
 	}
+
 	// Añadir cabeceras de la consulta SQL a la primera fila del archivo de salida
 	public static void agregarCabecerasConsulta(Sheet outputSheet, List<String> cabecerasConsulta) {
-	    Row headerRow = outputSheet.getRow(0); // Obtener la primera fila para las cabeceras
-	    if (headerRow == null) {
-	        headerRow = outputSheet.createRow(0); // Crear la fila si no existe
-	    }
-	    int firstCellNum = headerRow.getLastCellNum() == -1 ? 0 : headerRow.getLastCellNum(); // Ajuste para cuando getLastCellNum() devuelve -1
-	    for (String cabecera : cabecerasConsulta) {
-	        headerRow.createCell(firstCellNum++).setCellValue(cabecera);
-	    }
-	}	
+		Row headerRow = outputSheet.getRow(0); // Obtener la primera fila para las cabeceras
+		if (headerRow == null) {
+			headerRow = outputSheet.createRow(0); // Crear la fila si no existe
+		}
+		int firstCellNum = headerRow.getLastCellNum() == -1 ? 0 : headerRow.getLastCellNum(); // Ajuste para cuando
+																								// getLastCellNum()
+																								// devuelve -1
+		for (String cabecera : cabecerasConsulta) {
+			headerRow.createCell(firstCellNum++).setCellValue(cabecera);
+		}
+	}
 }

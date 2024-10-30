@@ -1,0 +1,12 @@
+package modelo;
+
+
+public class AdministradoraInfo {
+    int tipoEntidad;
+    int codigoEntidad;
+
+    public AdministradoraInfo(int tipoEntidad, int codigoEntidad) {
+        this.tipoEntidad = tipoEntidad;
+        this.codigoEntidad = codigoEntidad;
+    }
+}
