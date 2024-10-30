@@ -11,20 +11,11 @@ import java.util.Map;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import conexion.ConexionBD;
+
 public class RevisionArchivos9 {
 	public static void main(String[] args) {
 		long startTime = System.currentTimeMillis(); // Capturar el tiempo de inicio
-
-		String url = "jdbc:teradata://10.40.176.8/DATABASE=prod_dwh_sgp,USER=jcrojas,PASSWORD=JulPipe06*";
-
-		// Cargar el driver JDBC de Teradata
-		try {
-			Class.forName("com.teradata.jdbc.TeraDriver");
-		} catch (ClassNotFoundException e) {
-			System.out.println("Driver JDBC de Teradata no encontrado");
-			e.printStackTrace();
-			return;
-		}
 
 		// Leer documentos y cabeceras desde el archivo Excel
 		List<String> documentos = new ArrayList<>();
@@ -45,7 +36,7 @@ public class RevisionArchivos9 {
 		
 		
 		// Establecer la conexión
-		try (Connection connection = DriverManager.getConnection(url)) {
+		try (Connection connection = ConexionBD.obtenerConexion()) {
 			if (connection != null) {
 				System.out.println("Conectado a Teradata exitosamente");
 
